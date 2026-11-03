@@ -2,6 +2,7 @@ import http from 'node:http';
 import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { YoupiPaymentClient } from '@youpi/merchant-sdk';
@@ -118,7 +119,9 @@ export class CoinWalletStoreServer {
       || process.env.COIN_STORE_IDEMPOTENCY_PATH
       || (underTest
         ? ':memory:'
-        : path.resolve(__dirname, '../../../data/coin-wallet-fulfillment.sqlite'));
+        : (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME)
+          ? path.resolve(os.tmpdir(), 'coin-wallet-fulfillment.sqlite')
+          : path.resolve(__dirname, '../../../data/coin-wallet-fulfillment.sqlite'));
     this.openFulfillmentLedger();
 
     this.paymentClient = new YoupiPaymentClient({
@@ -142,7 +145,9 @@ export class CoinWalletStoreServer {
 
   openFulfillmentLedger() {
     if (this.idempotencyPath !== ':memory:') {
-      fs.mkdirSync(path.dirname(this.idempotencyPath), { recursive: true });
+      try {
+        fs.mkdirSync(path.dirname(this.idempotencyPath), { recursive: true });
+      } catch {}
     }
     this.ledger = new DatabaseSync(this.idempotencyPath);
     this.ledger.exec(`

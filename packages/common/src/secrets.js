@@ -1,12 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { encrypt, decrypt } from './crypto.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Resolved from this file, not cwd: every service must read the same files.
-const SECRETS_DIR = path.resolve(__dirname, '../../../data/.secrets');
+const SECRETS_DIR = (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME)
+  ? path.resolve(os.tmpdir(), '.youpi-secrets')
+  : path.resolve(__dirname, '../../../data/.secrets');
 
 const cache = new Map();
 
@@ -26,14 +29,17 @@ export function resolveSecret(name, envVar) {
   let value = '';
   try { value = fs.readFileSync(file, 'utf8').trim(); } catch {}
   if (!value) {
-    fs.mkdirSync(SECRETS_DIR, { recursive: true, mode: 0o700 });
     const fresh = crypto.randomBytes(32).toString('hex');
     try {
+      fs.mkdirSync(SECRETS_DIR, { recursive: true, mode: 0o700 });
       fs.writeFileSync(file, fresh, { flag: 'wx', mode: 0o600 });
       value = fresh;
     } catch {
-      // Another process created it first: use theirs.
-      value = fs.readFileSync(file, 'utf8').trim();
+      try {
+        value = fs.readFileSync(file, 'utf8').trim();
+      } catch {
+        value = fresh;
+      }
     }
   }
   // Harden permissions for pre-existing stores as well as freshly generated keys.

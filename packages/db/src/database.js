@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { runMigrations } from './migrate.js';
@@ -67,12 +68,16 @@ export class Database {
         dbPath = path.isAbsolute(process.env.SQLITE_DB_PATH)
           ? process.env.SQLITE_DB_PATH
           : path.resolve(repoRoot, process.env.SQLITE_DB_PATH);
+      } else if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+        dbPath = path.resolve(os.tmpdir(), 'youpi_pg.sqlite');
       } else {
         dbPath = path.resolve(repoRoot, 'data/youpi_pg.sqlite');
       }
       const dir = path.dirname(dbPath);
       if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+        try {
+          fs.mkdirSync(dir, { recursive: true });
+        } catch {}
       }
       this.db = new DatabaseSync(dbPath);
     }

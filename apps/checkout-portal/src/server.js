@@ -298,6 +298,13 @@ export class CheckoutServer {
       const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
       const pathname = url.pathname;
 
+      // Direct root requests redirect to the storefront
+      if (pathname === '/' || pathname === '') {
+        res.writeHead(302, { 'Location': '/store' });
+        res.end();
+        return;
+      }
+
       // Health
       if (pathname === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -362,6 +369,26 @@ export class CheckoutServer {
           res.end('Error loading SDK: ' + err.message);
         }
         return;
+      }
+
+      // Static screenshots / assets: GET /assets/:filename with path traversal protection
+      if (pathname.startsWith('/assets/')) {
+        const assetName = path.basename(pathname);
+        const assetDir = path.resolve(__dirname, '..', 'public', 'assets');
+        const assetPath = path.resolve(assetDir, assetName);
+        const relative = path.relative(assetDir, assetPath);
+        const isSecure = relative && !relative.startsWith('..') && !path.isAbsolute(relative);
+        if (isSecure && fs.existsSync(assetPath)) {
+          const ext = path.extname(assetName).toLowerCase();
+          const contentType = ext === '.png' ? 'image/png' : ext === '.svg' ? 'image/svg+xml' : 'image/jpeg';
+          res.writeHead(200, {
+            'Content-Type': contentType,
+            'Cache-Control': 'public, max-age=86400',
+            'Access-Control-Allow-Origin': '*'
+          });
+          fs.createReadStream(assetPath).pipe(res);
+          return;
+        }
       }
 
       // Static icons: GET /icons/:filename with path traversal protection
