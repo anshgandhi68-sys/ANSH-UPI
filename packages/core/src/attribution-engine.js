@@ -115,6 +115,11 @@ export class AttributionEngine {
    * }}
    */
   processObservation(normalizedObs) {
+    if (normalizedObs && normalizedObs.amountPaise !== undefined && normalizedObs.amountPaise !== null) {
+      try {
+        normalizedObs.amountPaise = BigInt(normalizedObs.amountPaise);
+      } catch {}
+    }
     // Tier 1: Check fingerprint for deduplication
     const existing = this.obsRepo.findByFingerprint(normalizedObs.fingerprintHash);
     if (existing) {
@@ -596,8 +601,8 @@ export class AttributionEngine {
           sources: verifyResult.sources
         });
 
-        // If grace period is 0 (e.g. in instant tests), finalize immediately
-        if (this.verificationPolicy === 'SINGLE_CHANNEL_VALIDATED_GMAIL' || this.gracePeriodMs <= 0) {
+        // If grace period is 0 (e.g. in instant tests), finalize immediately unless dual channel is strictly required
+        if (this.verificationPolicy !== 'REQUIRE_DUAL_CHANNEL' && (this.verificationPolicy === 'SINGLE_CHANNEL_VALIDATED_GMAIL' || this.gracePeriodMs <= 0)) {
           const finalResult = this.sessionRepo.recordVerificationSource(
             currentSession.id,
             normalizedObs.source,
@@ -691,6 +696,11 @@ export class AttributionEngine {
             return;
           }
 
+          // In strict dual-channel mode, a single observation never finalizes to success
+          if (this.verificationPolicy === 'REQUIRE_DUAL_CHANNEL') {
+            return;
+          }
+
           // 5 seconds elapsed without second source: finalize as Level 1
           const finalResult = this.sessionRepo.recordVerificationSource(
             targetSessionId,
@@ -737,7 +747,7 @@ export class AttributionEngine {
           wasActive,
           paymentSessionId: currentSession.id,
           observationId: savedObs.id,
-          outcomeStatus: 'VERIFYING',
+          outcomeStatus: this.verificationPolicy === 'REQUIRE_DUAL_CHANNEL' ? PaymentStatus.PROCESSING : 'VERIFYING',
           verificationLevel: 1,
           verificationTag: verifyResult.tag,
           verificationSources: verifyResult.sources

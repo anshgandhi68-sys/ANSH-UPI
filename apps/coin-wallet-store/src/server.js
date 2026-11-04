@@ -2,6 +2,7 @@ import http from 'node:http';
 import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { YoupiPaymentClient } from '@youpi/merchant-sdk';
@@ -118,7 +119,9 @@ export class CoinWalletStoreServer {
       || process.env.COIN_STORE_IDEMPOTENCY_PATH
       || (underTest
         ? ':memory:'
-        : path.resolve(__dirname, '../../../data/coin-wallet-fulfillment.sqlite'));
+        : (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME)
+          ? path.resolve(os.tmpdir(), 'coin-wallet-fulfillment.sqlite')
+          : path.resolve(__dirname, '../../../data/coin-wallet-fulfillment.sqlite'));
     this.openFulfillmentLedger();
 
     this.paymentClient = new YoupiPaymentClient({
@@ -142,7 +145,9 @@ export class CoinWalletStoreServer {
 
   openFulfillmentLedger() {
     if (this.idempotencyPath !== ':memory:') {
-      fs.mkdirSync(path.dirname(this.idempotencyPath), { recursive: true });
+      try {
+        fs.mkdirSync(path.dirname(this.idempotencyPath), { recursive: true });
+      } catch {}
     }
     this.ledger = new DatabaseSync(this.idempotencyPath);
     this.ledger.exec(`
@@ -321,7 +326,7 @@ export class CoinWalletStoreServer {
 
       // REVERSE PROXY: /checkout/*, /icons/*, /css/*, and /js/* -> Checkout Portal (Port 7000)
       if (pathname.startsWith('/checkout') || pathname.startsWith('/icons/') || pathname.startsWith('/css/') || pathname.startsWith('/js/')) {
-      const portalUrl = process.env.CHECKOUT_PORTAL_URL || `http://127.0.0.1:${process.env.CHECKOUT_PORT || 7000}`;
+      const portalUrl = process.env.CHECKOUT_PORTAL_URL || process.env.BASE_CHECKOUT_URL || `http://127.0.0.1:${process.env.CHECKOUT_PORTAL_PORT || process.env.CHECKOUT_PORT || 7000}`;
       const targetUrl = new URL(req.url, portalUrl);
       const requestClient = targetUrl.protocol === 'https:' ? https : http;
       const proxyReq = requestClient.request({

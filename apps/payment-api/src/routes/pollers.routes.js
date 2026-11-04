@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { HttpServer } from '../server.js';
 import { ObservationNormalizer, BankSmsParser, BankEmailParser, generateQrSvg } from '@youpi/core';
@@ -240,7 +241,8 @@ export function registerPollerRoutes(server, ctx) {
         accepted: true,
         observationId: pipeResult.messageId || pipeResult.stages?.stage6?.details?.observationId,
         attribution: pipeResult.stages?.stage6?.details || pipeResult,
-        pipeline: pipeResult
+        pipeline: pipeResult,
+        ...(body.clientMessageId ? { clientMessageId: body.clientMessageId } : {})
       });
       return;
     }
@@ -539,7 +541,8 @@ export function registerPollerRoutes(server, ctx) {
         accepted: true,
         observationId: pipeResult.messageId || pipeResult.stages?.stage6?.details?.observationId,
         attribution: pipeResult.stages?.stage6?.details || pipeResult,
-        pipeline: pipeResult
+        pipeline: pipeResult,
+        ...(body.clientMessageId ? { clientMessageId: body.clientMessageId } : {})
       });
       return;
     }
@@ -736,12 +739,16 @@ export function registerPollerRoutes(server, ctx) {
 
     if (!foundPath) {
       // Create a fallback stub APK binary file if build hasn't outputted yet
-      const fallbackDir = path.resolve(__dirname, '../../public');
-      if (!fs.existsSync(fallbackDir)) fs.mkdirSync(fallbackDir, { recursive: true });
-      foundPath = path.join(fallbackDir, 'youpi-sms-gateway.apk');
-      if (!fs.existsSync(foundPath)) {
-        fs.writeFileSync(foundPath, Buffer.from('PK\x03\x04YOUPI_SMS_GATEWAY_STANDALONE_APK_PACKAGE'));
-      }
+      const fallbackDir = (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME)
+        ? path.resolve(os.tmpdir(), 'public')
+        : path.resolve(__dirname, '../../public');
+      try {
+        if (!fs.existsSync(fallbackDir)) fs.mkdirSync(fallbackDir, { recursive: true });
+        foundPath = path.join(fallbackDir, 'youpi-sms-gateway.apk');
+        if (!fs.existsSync(foundPath)) {
+          fs.writeFileSync(foundPath, Buffer.from('PK\x03\x04YOUPI_SMS_GATEWAY_STANDALONE_APK_PACKAGE'));
+        }
+      } catch {}
     }
 
     const stat = fs.statSync(foundPath);

@@ -69,6 +69,7 @@ describe('Gmail Poller Boot Lifecycle & Control Suite', () => {
         assert.equal(health.body.isRunning, false);
       } finally {
         await observer.close();
+        try { apiInstance.app.context.sessionRepo.updateStatus(session.id, 'SUCCESS'); } catch {}
       }
     });
 
@@ -89,6 +90,7 @@ describe('Gmail Poller Boot Lifecycle & Control Suite', () => {
         assert.equal(health.body.isRunning, false);
       } finally {
         await observer.close();
+        try { apiInstance.app.context.sessionRepo.updateStatus(session.id, 'SUCCESS'); } catch {}
       }
     });
 
@@ -120,6 +122,7 @@ describe('Gmail Poller Boot Lifecycle & Control Suite', () => {
         assert.equal(health.body.isRunning, false);
       } finally {
         await observer.close();
+        try { apiInstance.app.context.sessionRepo.updateStatus(session.id, 'SUCCESS'); } catch {}
       }
     });
 
@@ -138,6 +141,7 @@ describe('Gmail Poller Boot Lifecycle & Control Suite', () => {
         assert.equal(health.body.degradedReason, 'MISSING_OAUTH_CREDENTIALS');
       } finally {
         await observer.close();
+        try { apiInstance.app.context.sessionRepo.updateStatus(session.id, 'SUCCESS'); } catch {}
       }
     });
 
@@ -171,6 +175,7 @@ describe('Gmail Poller Boot Lifecycle & Control Suite', () => {
         assert.equal(health.body.connectedEmail, 'a***@vvisa.in'); // Masked PII
       } finally {
         await observer.close();
+        try { apiInstance.app.context.sessionRepo.updateStatus(session.id, 'SUCCESS'); } catch {}
       }
     });
   });
@@ -183,6 +188,15 @@ describe('Gmail Poller Boot Lifecycle & Control Suite', () => {
     });
 
     test('Persists message IDs across restarts and rejects duplicates', async () => {
+      // Create an active session in Payment API for 150.00
+      const s1 = apiInstance.app.context.sessionRepo.create({
+        merchantId: '00000000-0000-0000-0000-000000000001',
+        receivingAccountId: '00000000-0000-0000-0000-000000000002',
+        orderId: 'ORD-BOOT-101',
+        amountPaise: 15000n,
+        status: 'ACTIVE'
+      });
+
       // 1. Start Instance 1
       const inst1 = await startGmailObserver(6086, {
         apiBaseUrl: `http://localhost:${apiInstance.port}`,
@@ -228,6 +242,7 @@ describe('Gmail Poller Boot Lifecycle & Control Suite', () => {
         assert.equal(res2.reason, 'MESSAGE_ALREADY_PROCESSED');
       } finally {
         await inst2.close();
+        try { apiInstance.app.context.sessionRepo.updateStatus(s1.id, 'SUCCESS'); } catch {}
       }
     });
   });
@@ -246,7 +261,8 @@ describe('Gmail Poller Boot Lifecycle & Control Suite', () => {
           merchantId: '00000000-0000-0000-0000-000000000001',
           receivingAccountId: '00000000-0000-0000-0000-000000000002',
           orderId: 'ISOLATION-TEST-ORD-1',
-          amountPaise: 30000n // ₹300.00
+          amountPaise: 30000n, // ₹300.00
+          status: 'ACTIVE'
         });
 
         // Submit matching bank observation via observer
@@ -266,6 +282,7 @@ describe('Gmail Poller Boot Lifecycle & Control Suite', () => {
         assert.notEqual(currentSession.status, 'FAILED');
       } finally {
         await observer.close();
+        try { apiInstance.app.context.sessionRepo.updateStatus(session.id, 'SUCCESS'); } catch {}
       }
     });
   });
